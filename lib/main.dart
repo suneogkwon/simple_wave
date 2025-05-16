@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:simple_wave/wave.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,22 +80,50 @@ class _SimpleWaveState extends State<SimpleWave> {
         decoration: _backgroundGradient,
         child: Stack(
           fit: StackFit.expand,
-          alignment: Alignment.bottomCenter,
           children: [
-            Text(
-              'Simple Wave',
-              style: TextStyle(color: Colors.white, fontSize: 30),
-            ),
-            Align(
+            Center(
               child: Text(
-                'Simple Wave222',
+                'Simple Wave',
                 style: TextStyle(color: Colors.white, fontSize: 30),
               ),
             ),
-            // Wave(),
+            ..._buildWaves(),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildWaves() {
+    return [
+      Wave(
+        heightScope: 1.05,
+        amplitude: 10,
+        period: 20,
+        length: 400,
+        color: Colors.white24,
+      ),
+      Wave(
+        heightScope: 1,
+        amplitude: 40,
+        period: 16,
+        length: 1100,
+        color: Colors.white24,
+      ),
+      Wave(
+        heightScope: 1.02,
+        amplitude: 30,
+        period: 5,
+        length: 600,
+        color: Colors.white24,
+      ),
+      Wave(
+        heightScope: 0.95,
+        amplitude: 25,
+        period: 10,
+        length: 800,
+        color: Colors.white.withAlpha(230),
+      ),
+    ].map((e) => Align(alignment: Alignment.bottomCenter, child: e)).toList();
   }
 }
