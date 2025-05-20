@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -31,48 +32,41 @@ class MainApp extends StatelessWidget {
 class SimpleWave extends StatefulWidget {
   const SimpleWave({super.key});
 
-  static SimpleWaveState of(BuildContext context) =>
-      context.findAncestorStateOfType()!;
-
   @override
   State<SimpleWave> createState() => SimpleWaveState();
 }
 
 class SimpleWaveState extends State<SimpleWave> {
   late final StreamSubscription<AccelerometerEvent> _accelerometerSubscription;
+  late final double _angleOffset;
 
-  /// 중력 벡터의 Z축 기준 회전 각도 (0-360도)
+  /// Z축 회전 각도 (0-360도)
   final _smoothedGravityAngleNotifier = ValueNotifier(0.0);
+  bool _listenGravityChanges = false;
 
   /// 스무딩 계수 (0-1, 작을수록 더 부드러움)
   final _alpha = 0.1;
 
-  final _backgroundGradient = BoxDecoration(
-    gradient: LinearGradient(
-      colors: [Color(0xFF6844D5), Color(0xFF6399FF), Color(0xFF87E3F8)],
-      stops: [0.0, 0.5, 0.9],
-      begin: Alignment.bottomLeft,
-      end: Alignment.topRight,
-    ),
-  );
-
+  /// 스무딩 적용된 Z축 회전 각도
   double get _smoothedGravityAngle => _smoothedGravityAngleNotifier.value;
 
-  /// 수직 및 반시계 회전 기준 회전 각도
-  double get _resolvedGravityAngle => 360 - (_smoothedGravityAngle - 90);
+  /// 플랫폼 및 반시계 회전 기준 회전 각도
+  double get _resolvedGravityAngle =>
+      (_listenGravityChanges ? -_smoothedGravityAngle : -90) + _angleOffset;
 
-  /// 중력 방향 업데이트
-  void _updateGravityDirection(AccelerometerEvent event) {
+  /// 회전 각도 업데이트
+  void _updateGravityAngle(AccelerometerEvent event) {
     try {
       // 중력 방향 계산
-      var (gravityAngle, tiltAngle) = _calculateGravityDirection(event);
+      var (gravityAngle, tiltAngle) = _calculateGravityAngle(event);
+      // 스무딩 적용
       gravityAngle = _applySmoothing(gravityAngle);
 
+      // 수평에 근접하면 각도를 업데이트 하지 않는다.
       if (_checkHorizontal(gravityAngle, tiltAngle)) {
         return;
       }
 
-      // 스무딩 적용
       _smoothedGravityAngleNotifier.value = gravityAngle;
     } catch (e) {
       // 오류 처리
@@ -81,7 +75,7 @@ class SimpleWaveState extends State<SimpleWave> {
   }
 
   /// Z축 회전을 기준으로 중력 방향을 계산하는 함수
-  (double gravityAngle, double tiltAngle) _calculateGravityDirection(
+  (double gravityAngle, double tiltAngle) _calculateGravityAngle(
     AccelerometerEvent event,
   ) {
     // 가속도계 데이터 (중력 벡터)
@@ -114,6 +108,7 @@ class SimpleWaveState extends State<SimpleWave> {
     return (gravityAngle, tiltAngle);
   }
 
+  /// 과도한 흔들림을 방지하기 위한 수평 체크
   bool _checkHorizontal(double gravityAngle, double tiltAngle) {
     // 각도의 차이 계산 (원형 데이터 처리)
     final diff = (gravityAngle - _smoothedGravityAngle) % 360 * _alpha;
@@ -135,12 +130,36 @@ class SimpleWaveState extends State<SimpleWave> {
     return (_smoothedGravityAngle + diff + 360) % 360;
   }
 
+  void _startListenGravityChanges() {
+    setState(() {
+      _listenGravityChanges = true;
+      _accelerometerSubscription.resume();
+    });
+  }
+
+  void _stopListenGravityChanges() {
+    setState(() {
+      _listenGravityChanges = false;
+      _accelerometerSubscription.pause();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+
+    // 모바일이면 각도 보정을 위해 90도를 더한다.
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        _angleOffset = 90;
+      }
+    } catch (e) {
+      _angleOffset = 0;
+    }
+
     _accelerometerSubscription = accelerometerEventStream(
       samplingPeriod: SensorInterval.gameInterval,
-    ).listen(_updateGravityDirection);
+    ).listen(_updateGravityAngle);
   }
 
   @override
@@ -152,27 +171,57 @@ class SimpleWaveState extends State<SimpleWave> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: DecoratedBox(
-        decoration: _backgroundGradient,
+      body: _buildBackground(
         child: Stack(
           fit: StackFit.expand,
+          children: [_buildWaves(), _buildTitle()],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackground({required Widget child}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF6844D5), Color(0xFF6399FF), Color(0xFF87E3F8)],
+          stops: [0.0, 0.5, 0.9],
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildTitle() {
+    return Center(
+      child: ValueListenableBuilder(
+        valueListenable: _smoothedGravityAngleNotifier,
+        builder:
+            (context, value, child) => Transform.rotate(
+              angle: _resolvedGravityAngle * math.pi / 180,
+              child: child,
+            ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Center(
-              child: ValueListenableBuilder(
-                valueListenable: _smoothedGravityAngleNotifier,
-                builder:
-                    (context, value, child) => Transform.rotate(
-                      angle: _resolvedGravityAngle * math.pi / 180,
-                      child: child,
-                    ),
-                child: Text(
-                  'Simple Wave',
-                  style: TextStyle(color: Colors.white, fontSize: 30),
-                ),
+            Text(
+              'Simple Wave',
+              style: TextStyle(color: Colors.white, fontSize: 30),
+            ),
+            IconButton(
+              color: Colors.white,
+              onPressed:
+                  _listenGravityChanges
+                      ? _stopListenGravityChanges
+                      : _startListenGravityChanges,
+              icon: Icon(
+                _listenGravityChanges
+                    ? Icons.arrow_downward_rounded
+                    : Icons.rotate_90_degrees_ccw_rounded,
               ),
             ),
-            _buildWaves(),
-            GestureDetector(),
           ],
         ),
       ),
@@ -182,44 +231,43 @@ class SimpleWaveState extends State<SimpleWave> {
   Widget _buildWaves() {
     return ValueListenableBuilder(
       valueListenable: _smoothedGravityAngleNotifier,
-      builder: (context, value, child) {
-        return Stack(
-          children: [
-            Wave(
-              heightFactor: 0.75,
-              amplitude: 10,
-              period: 20,
-              length: 400,
-              color: Colors.white24,
-              rotation: _resolvedGravityAngle,
-            ),
-            Wave(
-              heightFactor: 0.70,
-              amplitude: 40,
-              period: 16,
-              length: 1300,
-              color: Colors.white24,
-              rotation: _resolvedGravityAngle,
-            ),
-            Wave(
-              heightFactor: 0.73,
-              amplitude: 30,
-              period: 5,
-              length: 600,
-              color: Colors.white24,
-              rotation: _resolvedGravityAngle,
-            ),
-            Wave(
-              heightFactor: 0.63,
-              amplitude: 25,
-              period: 10,
-              length: 800,
-              color: Colors.white.withAlpha(230),
-              rotation: _resolvedGravityAngle,
-            ),
-          ],
-        );
-      },
+      builder:
+          (context, value, child) => Stack(
+            children: [
+              Wave(
+                heightFactor: 0.75,
+                amplitude: 10,
+                period: 20,
+                length: 400,
+                color: Colors.white24,
+                rotation: _resolvedGravityAngle,
+              ),
+              Wave(
+                heightFactor: 0.70,
+                amplitude: 40,
+                period: 16,
+                length: 1300,
+                color: Colors.white24,
+                rotation: _resolvedGravityAngle,
+              ),
+              Wave(
+                heightFactor: 0.73,
+                amplitude: 30,
+                period: 5,
+                length: 600,
+                color: Colors.white24,
+                rotation: _resolvedGravityAngle,
+              ),
+              Wave(
+                heightFactor: 0.63,
+                amplitude: 25,
+                period: 10,
+                length: 800,
+                color: Colors.white.withAlpha(230),
+                rotation: _resolvedGravityAngle,
+              ),
+            ],
+          ),
     );
   }
 }

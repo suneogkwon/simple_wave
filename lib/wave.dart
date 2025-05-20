@@ -82,11 +82,12 @@ class WavePainter extends CustomPainter {
   /// 타원형 근사를 사용한 부드러운 거리 계산
   double _getDistanceAtAngle(Size size) {
     // 각도를 라디안으로 변환
-    // 90도를 뺀 이유는 파도 방향(90도)과 일치시키기 위함
+    // 90도를 뺀 이유는 모바일에서 파도 방향과 일치시키기 위함
     double radians = _rotationRadian - math.pi / 2;
     if (radians < 0) {
       radians += 2 * math.pi;
     }
+
     final double a = size.width / 2;
     final double b = size.height / 2;
 
