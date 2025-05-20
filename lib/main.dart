@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:developer';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -38,7 +37,6 @@ class SimpleWave extends StatefulWidget {
 
 class SimpleWaveState extends State<SimpleWave> {
   late final StreamSubscription<AccelerometerEvent> _accelerometerSubscription;
-  late final double _angleOffset;
 
   /// Z축 회전 각도 (0-360도)
   final _smoothedGravityAngleNotifier = ValueNotifier(0.0);
@@ -50,9 +48,9 @@ class SimpleWaveState extends State<SimpleWave> {
   /// 스무딩 적용된 Z축 회전 각도
   double get _smoothedGravityAngle => _smoothedGravityAngleNotifier.value;
 
-  /// 플랫폼 및 반시계 회전 기준 회전 각도
+  /// 반시계 기준 회전 각도
   double get _resolvedGravityAngle =>
-      (_listenGravityChanges ? -_smoothedGravityAngle : -90) + _angleOffset;
+      _listenGravityChanges ? (-_smoothedGravityAngle + 90) : 0;
 
   /// 회전 각도 업데이트
   void _updateGravityAngle(AccelerometerEvent event) {
@@ -147,15 +145,6 @@ class SimpleWaveState extends State<SimpleWave> {
   @override
   void initState() {
     super.initState();
-
-    // 모바일이면 각도 보정을 위해 90도를 더한다.
-    try {
-      if (Platform.isAndroid || Platform.isIOS) {
-        _angleOffset = 90;
-      }
-    } catch (e) {
-      _angleOffset = 0;
-    }
 
     _accelerometerSubscription = accelerometerEventStream(
       samplingPeriod: SensorInterval.gameInterval,
